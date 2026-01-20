@@ -1,0 +1,7 @@
+{
+  "description": "Social Media Command Center with AI Creative Tools and Live Voice interaction.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "name": "Social Media Command Center"
+}
