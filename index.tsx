@@ -273,10 +273,11 @@ const App = () => {
     setChatInput('');
     setIsAiLoading(true);
     try {
-      // Logic checking for API_KEY
       const currentApiKey = process.env.API_KEY;
+      
+      // Check if Key exists at all
       if (!currentApiKey) {
-        throw new Error("⚠️ កំហុស៖ លោកអ្នកមិនទាន់បានប្តូរឈ្មោះ API Key ក្នុង Vercel ទេ។ សូមប្តូរពី 'WorkManagement' ទៅជា 'API_KEY' រួចធ្វើការ Redeploy ឡើងវិញ។");
+        throw new Error("⚠️ កំហុស៖ មិនមាន API_KEY ទេ។ សូមប្តូរឈ្មោះក្នុង Vercel ពី 'WorkManagement' ទៅជា 'API_KEY' រួច Redeploy។");
       }
 
       const ai = new GoogleGenAI({ apiKey: currentApiKey });
@@ -284,7 +285,7 @@ const App = () => {
         model: 'gemini-3-pro-preview',
         contents: [...chatHistory, userMsg].map(h => ({ role: h.role, parts: [{ text: h.text }] })),
         config: {
-          systemInstruction: `You are the Official AI Strategist for Pron Luy. Use internal data: ${driveContext}. Help with TikTok, Facebook, Telegram growth. Use Khmer if appropriate. Always provide professional advice.`,
+          systemInstruction: `You are the Official AI Strategist for Pron Luy. Help with TikTok, Facebook, Telegram growth. Use Khmer.`,
           tools: [{ googleSearch: {} }]
         },
       });
@@ -292,7 +293,19 @@ const App = () => {
       setChatHistory(prev => [...prev, { role: 'model', text: response.text || 'Thinking...', sources }]);
     } catch (e: any) {
       console.error(e);
-      setChatHistory(prev => [...prev, { role: 'model', text: e.message || 'Error communicating with the neural core. Please check your API_KEY setting in Vercel Dashboard.' }]);
+      let errorKhmer = "Neural Core Error.";
+      
+      // Parse specific error messages for better feedback
+      const errorString = e.toString().toLowerCase() || "";
+      if (errorString.includes("api key not valid") || errorString.includes("invalid_argument")) {
+        errorKhmer = "⚠️ API Key របស់អ្នកមិនត្រឹមត្រូវ (Invalid)។ សូមពិនិត្យមើល 'Value' នៃ API Key ក្នុង Vercel ឡើងវិញ ថាតើលោកអ្នក Copy មកគ្រប់គ្រាន់ដែរឬទេ? កូដត្រូវផ្ដើមដោយ AIza...";
+      } else if (errorString.includes("403")) {
+        errorKhmer = "⚠️ API Key នេះមិនមានសិទ្ធិប្រើប្រាស់ Gemini 3 Pro ទេ។ សូមពិនិត្យមើល Billing ឬការកំណត់ក្នុង Google AI Studio។";
+      } else {
+        errorKhmer = `⚠️ មានបញ្ហាបច្ចេកទេស៖ ${e.message || "Unknown error"}`;
+      }
+      
+      setChatHistory(prev => [...prev, { role: 'model', text: errorKhmer }]);
     } finally {
       setIsAiLoading(false);
     }
