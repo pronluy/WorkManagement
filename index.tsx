@@ -233,7 +233,9 @@ const App = () => {
     if (!account) return;
     setSyncingId(id);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const currentApiKey = process.env.API_KEY;
+      if (!currentApiKey) throw new Error("Missing API_KEY");
+      const ai = new GoogleGenAI({ apiKey: currentApiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `Simulate a realistic daily stat update for a ${account.platform} account (${account.niche}). 
@@ -271,19 +273,26 @@ const App = () => {
     setChatInput('');
     setIsAiLoading(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // Logic checking for API_KEY
+      const currentApiKey = process.env.API_KEY;
+      if (!currentApiKey) {
+        throw new Error("⚠️ កំហុស៖ លោកអ្នកមិនទាន់បានប្តូរឈ្មោះ API Key ក្នុង Vercel ទេ។ សូមប្តូរពី 'WorkManagement' ទៅជា 'API_KEY' រួចធ្វើការ Redeploy ឡើងវិញ។");
+      }
+
+      const ai = new GoogleGenAI({ apiKey: currentApiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: [...chatHistory, userMsg].map(h => ({ role: h.role, parts: [{ text: h.text }] })),
         config: {
-          systemInstruction: `You are the Official AI Strategist for Pron Luy. Use internal data: ${driveContext}. Use Google Search for trends. Help with TikTok, Facebook, Telegram growth. Use Khmer if appropriate.`,
+          systemInstruction: `You are the Official AI Strategist for Pron Luy. Use internal data: ${driveContext}. Help with TikTok, Facebook, Telegram growth. Use Khmer if appropriate. Always provide professional advice.`,
           tools: [{ googleSearch: {} }]
         },
       });
       const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
       setChatHistory(prev => [...prev, { role: 'model', text: response.text || 'Thinking...', sources }]);
-    } catch (e) {
-      setChatHistory(prev => [...prev, { role: 'model', text: 'Connection to Brain Matrix lost. Check API settings.' }]);
+    } catch (e: any) {
+      console.error(e);
+      setChatHistory(prev => [...prev, { role: 'model', text: e.message || 'Error communicating with the neural core. Please check your API_KEY setting in Vercel Dashboard.' }]);
     } finally {
       setIsAiLoading(false);
     }
@@ -477,6 +486,7 @@ const App = () => {
                       <div className="h-full flex flex-col items-center justify-center text-center space-y-6 opacity-30 grayscale">
                         <BrainCircuit size={80} className="text-amber-500" />
                         <p className="font-black text-sm uppercase tracking-[0.6em]">System Awaiting Command...</p>
+                        <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">System Check: {process.env.API_KEY ? 'API_KEY OK ✅' : 'API_KEY MISSING ❌'}</p>
                       </div>
                     )}
                     {chatHistory.map((m, i) => (
