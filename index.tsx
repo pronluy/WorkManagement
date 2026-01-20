@@ -58,9 +58,22 @@ import {
   LogOut,
   User,
   ShieldCheck,
-  Coins
+  Coins,
+  Key
 } from 'lucide-react';
 import { GoogleGenAI, Modality, Type, LiveServerMessage } from "@google/genai";
+
+// Fix: Redefine the expected structure for aistudio globally to match environment requirements.
+interface AIStudio {
+  hasSelectedApiKey: () => Promise<boolean>;
+  openSelectKey: () => Promise<void>;
+}
+
+declare global {
+  interface Window {
+    aistudio: AIStudio;
+  }
+}
 
 // --- Types ---
 type Platform = 'TikTok' | 'Facebook' | 'Telegram';
@@ -235,6 +248,7 @@ const App = () => {
     try {
       const currentApiKey = process.env.API_KEY;
       if (!currentApiKey) throw new Error("Missing API_KEY");
+      // Fix: Always initialize GoogleGenAI inside the sync function to use the most recent key.
       const ai = new GoogleGenAI({ apiKey: currentApiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -265,6 +279,12 @@ const App = () => {
     }
   };
 
+  const handleOpenKeySelector = async () => {
+    if (window.aistudio) {
+      await window.aistudio.openSelectKey();
+    }
+  };
+
   const handleChat = async () => {
     if (!chatInput.trim()) return;
     const driveContext = files.map(f => `File: ${f.name} - Content: ${f.content}`).join('\n');
@@ -275,34 +295,33 @@ const App = () => {
     try {
       const currentApiKey = process.env.API_KEY;
       
-      // Check if Key exists at all
       if (!currentApiKey) {
         throw new Error("⚠️ កំហុស៖ មិនមាន API_KEY ទេ។ សូមប្តូរឈ្មោះក្នុង Vercel ពី 'WorkManagement' ទៅជា 'API_KEY' រួច Redeploy។");
       }
 
+      // Fix: Create instance right before generating content to ensure it uses the latest API key.
       const ai = new GoogleGenAI({ apiKey: currentApiKey });
       const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-preview',
+        model: 'gemini-3-flash-preview',
         contents: [...chatHistory, userMsg].map(h => ({ role: h.role, parts: [{ text: h.text }] })),
         config: {
-          systemInstruction: `You are the Official AI Strategist for Pron Luy. Help with TikTok, Facebook, Telegram growth. Use Khmer.`,
-          tools: [{ googleSearch: {} }]
+          systemInstruction: `You are the Official AI Strategist for Pron Luy. Help with TikTok, Facebook, Telegram growth. Use Khmer. Context: ${driveContext}`,
         },
       });
-      const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-      setChatHistory(prev => [...prev, { role: 'model', text: response.text || 'Thinking...', sources }]);
+      
+      setChatHistory(prev => [...prev, { role: 'model', text: response.text || 'Thinking...' }]);
     } catch (e: any) {
       console.error(e);
       let errorKhmer = "Neural Core Error.";
       
-      // Parse specific error messages for better feedback
       const errorString = e.toString().toLowerCase() || "";
-      if (errorString.includes("api key not valid") || errorString.includes("invalid_argument")) {
-        errorKhmer = "⚠️ API Key របស់អ្នកមិនត្រឹមត្រូវ (Invalid)។ សូមពិនិត្យមើល 'Value' នៃ API Key ក្នុង Vercel ឡើងវិញ ថាតើលោកអ្នក Copy មកគ្រប់គ្រាន់ដែរឬទេ? កូដត្រូវផ្ដើមដោយ AIza...";
+      // Fix: Handle requested entity not found by suggesting re-connection.
+      if (errorString.includes("api key not valid") || errorString.includes("invalid_argument") || errorString.includes("requested entity was not found")) {
+        errorKhmer = "⚠️ បញ្ហា API Key៖ ប្រព័ន្ធមិនទទួលស្គាល់ Key នេះទេ។ សូមចុចប៊ូតុង 'Connect Your Project' ខាងក្រោម ដើម្បីភ្ជាប់គម្រោងរបស់អ្នកឡើងវិញឱ្យបានត្រឹមត្រូវ។";
       } else if (errorString.includes("403")) {
-        errorKhmer = "⚠️ API Key នេះមិនមានសិទ្ធិប្រើប្រាស់ Gemini 3 Pro ទេ។ សូមពិនិត្យមើល Billing ឬការកំណត់ក្នុង Google AI Studio។";
+        errorKhmer = "⚠️ API Key នេះត្រូវបានបដិសេធ។ សូមប្រាកដថាអ្នកបានបើក Billing ឬជ្រើសរើស Key ថ្មី។";
       } else {
-        errorKhmer = `⚠️ មានបញ្ហាបច្ចេកទេស៖ ${e.message || "Unknown error"}`;
+        errorKhmer = `⚠️ បញ្ហាបច្ចេកទេស៖ ${e.message || "Unknown error"}`;
       }
       
       setChatHistory(prev => [...prev, { role: 'model', text: errorKhmer }]);
@@ -491,7 +510,7 @@ const App = () => {
                      <div className="p-5 bg-amber-500 text-black rounded-3xl shadow-xl shadow-amber-500/10"><Sparkles size={32} /></div>
                      <div>
                         <h2 className="text-2xl font-black text-white uppercase tracking-widest">AI Strategy Engine</h2>
-                        <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">Powered by Gemini 3 Pro & Google Search</p>
+                        <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">Powered by Gemini AI Studio</p>
                      </div>
                   </div>
                   <div className="flex-grow space-y-8 overflow-y-auto mb-10 pr-4 scrollbar-hide">
@@ -499,7 +518,12 @@ const App = () => {
                       <div className="h-full flex flex-col items-center justify-center text-center space-y-6 opacity-30 grayscale">
                         <BrainCircuit size={80} className="text-amber-500" />
                         <p className="font-black text-sm uppercase tracking-[0.6em]">System Awaiting Command...</p>
-                        <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">System Check: {process.env.API_KEY ? 'API_KEY OK ✅' : 'API_KEY MISSING ❌'}</p>
+                        <div className="flex flex-col gap-4">
+                           <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">System Check: {process.env.API_KEY ? 'API_KEY OK ✅' : 'API_KEY MISSING ❌'}</p>
+                           <button onClick={handleOpenKeySelector} className="flex items-center gap-3 bg-amber-500/20 text-amber-500 border border-amber-500/30 px-6 py-3 rounded-2xl text-[10px] font-black uppercase hover:bg-amber-500 hover:text-black transition-all">
+                              <Key size={14} /> Connect Your Project (Manual Fix)
+                           </button>
+                        </div>
                       </div>
                     )}
                     {chatHistory.map((m, i) => (
@@ -507,14 +531,11 @@ const App = () => {
                         <div className={`p-6 rounded-[2rem] max-w-[80%] text-sm leading-relaxed ${m.role === 'user' ? 'bg-amber-500 text-black font-bold shadow-xl shadow-amber-500/5' : 'bg-slate-800/80 text-slate-200 border border-slate-700/50'}`}>
                            {m.text}
                         </div>
-                        {m.sources && m.sources.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                             {m.sources.map((s, idx) => s.web && (
-                               <a key={idx} href={s.web.uri} target="_blank" rel="noreferrer" className="bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-full text-[9px] text-sky-400 hover:text-white transition-all flex items-center gap-2">
-                                  <LinkIcon size={10} /> Research {idx + 1}
-                               </a>
-                             ))}
-                          </div>
+                        {/* Check for connection errors specifically */}
+                        {m.text.includes("បញ្ហា API Key") && (
+                          <button onClick={handleOpenKeySelector} className="flex items-center gap-3 bg-amber-500/10 text-amber-500 border border-amber-500/30 px-6 py-2.5 rounded-full text-[10px] font-black uppercase hover:bg-amber-500 hover:text-black transition-all">
+                            <RefreshCw size={12} /> Re-Connect to Brain Matrix
+                          </button>
                         )}
                       </div>
                     ))}
